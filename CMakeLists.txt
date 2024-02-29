@@ -6,6 +6,10 @@ else()
 endif()
 message(STATUS "Using CMake version ${CMAKE_VERSION}")
 
+cmake_policy(SET CMP0091 NEW) 
+set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+set(MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+
 # If not specified on the command line, enable C11 as the default
 # Configuration items that affect the global compiler environment standards
 # should be issued before the "project" command.
