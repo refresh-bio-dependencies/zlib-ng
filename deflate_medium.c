@@ -45,10 +45,12 @@ static void insert_match(deflate_state *s, struct match match) {
     if (UNLIKELY(s->lookahead <= (unsigned int)(match.match_length + WANT_MIN_MATCH)))
         return;
 
+    /* string at strstart already in table */
+    match.strstart++;
+    match.match_length--;
+
     /* matches that are not long enough we need to emit as literals */
-    if (LIKELY(match.match_length < WANT_MIN_MATCH)) {
-        match.strstart++;
-        match.match_length--;
+    if (LIKELY(match.match_length < WANT_MIN_MATCH - 1)) {
         if (UNLIKELY(match.match_length > 0)) {
             if (match.strstart >= match.orgstart) {
                 if (match.strstart + match.match_length - 1 >= match.orgstart) {
@@ -63,35 +65,18 @@ static void insert_match(deflate_state *s, struct match match) {
         return;
     }
 
-    /* Insert new strings in the hash table only if the match length
-     * is not too large. This saves time but degrades compression.
-     */
-    if (match.match_length <= 16 * s->max_insert_length && s->lookahead >= WANT_MIN_MATCH) {
-        match.match_length--; /* string at strstart already in table */
-        match.strstart++;
-
-        if (LIKELY(match.strstart >= match.orgstart)) {
-            if (LIKELY(match.strstart + match.match_length - 1 >= match.orgstart)) {
-                insert_string(s, match.strstart, match.match_length);
-            } else {
-                insert_string(s, match.strstart, match.orgstart - match.strstart + 1);
-            }
-        } else if (match.orgstart < match.strstart + match.match_length) {
-            insert_string(s, match.orgstart, match.strstart + match.match_length - match.orgstart);
+    /* Insert into hash table. */
+    if (LIKELY(match.strstart >= match.orgstart)) {
+        if (LIKELY(match.strstart + match.match_length - 1 >= match.orgstart)) {
+            insert_string(s, match.strstart, match.match_length);
+        } else {
+            insert_string(s, match.strstart, match.orgstart - match.strstart + 1);
         }
-        match.strstart += match.match_length;
-        match.match_length = 0;
-    } else {
-        match.strstart += match.match_length;
-        match.match_length = 0;
-
-        if (match.strstart >= (STD_MIN_MATCH - 2))
-            quick_insert_string(s, match.strstart + 2 - STD_MIN_MATCH);
-
-        /* If lookahead < WANT_MIN_MATCH, ins_h is garbage, but it does not
-         * matter since it will be recomputed at next deflate call.
-         */
+    } else if (match.orgstart < match.strstart + match.match_length) {
+        insert_string(s, match.orgstart, match.strstart + match.match_length - match.orgstart);
     }
+    match.strstart += match.match_length;
+    match.match_length = 0;
 }
 
 static void fizzle_matches(deflate_state *s, struct match *current, struct match *next) {
@@ -215,7 +200,7 @@ Z_INTERNAL block_state deflate_medium(deflate_state *s, int flush) {
                  * of window index 0 (in particular we have to avoid a match
                  * of the string with itself at the start of the input file).
                  */
-                current_match.match_length = (uint16_t)functable.longest_match(s, hash_head);
+                current_match.match_length = (uint16_t)FUNCTABLE_CALL(longest_match)(s, hash_head);
                 current_match.match_start = (uint16_t)s->match_start;
                 if (UNLIKELY(current_match.match_length < WANT_MIN_MATCH))
                     current_match.match_length = 1;
@@ -250,7 +235,7 @@ Z_INTERNAL block_state deflate_medium(deflate_state *s, int flush) {
                  * of window index 0 (in particular we have to avoid a match
                  * of the string with itself at the start of the input file).
                  */
-                next_match.match_length = (uint16_t)functable.longest_match(s, hash_head);
+                next_match.match_length = (uint16_t)FUNCTABLE_CALL(longest_match)(s, hash_head);
                 next_match.match_start = (uint16_t)s->match_start;
                 if (UNLIKELY(next_match.match_start >= next_match.strstart)) {
                     /* this can happen due to some restarts */
